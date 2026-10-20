@@ -1,5 +1,6 @@
 import Input from "@/components/Input";
 import Tombol from "@/components/Tombol";
+import FieldDeskripsiAI from "@/components/FieldDeskripsiAI";
 
 // Dipakai untuk tambah produk (US-08) dan ubah produk (US-09). Keduanya bonus di jalur offline.
 // Nama field sama dengan kolom tabel "produk".
@@ -23,7 +24,7 @@ export default function FormProduk({ produk = {}, labelTombol, action }) {
         placeholder="https://... atau /produk/nama-file.svg"
         defaultValue={produk.foto_url}
       />
-      <Input label="Deskripsi" name="deskripsi" textarea defaultValue={produk.deskripsi} />
+      <FieldDeskripsiAI defaultValue={produk.deskripsi || ""} />
       <div className="flex gap-3">
         <Tombol type="submit">{labelTombol}</Tombol>
         <Tombol href="/admin" varian="garis">

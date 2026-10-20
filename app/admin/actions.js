@@ -230,3 +230,82 @@ export async function hapusProduk(idOrFormData, maybeFormData) {
   revalidatePath("/");
   revalidatePath("/admin");
 }
+
+export async function buatDeskripsiAI(nama, kategori) {
+  try {
+    await wajibAdmin();
+
+    const namaProduk = String(nama || "").trim();
+    const kategoriProduk = String(kategori || "").trim();
+
+    if (!namaProduk) {
+      return { sukses: false, error: "Nama produk wajib diisi sebelum membuat deskripsi dengan AI." };
+    }
+
+    if (namaProduk.length > 100) {
+      return { sukses: false, error: "Nama produk terlalu panjang (maksimal 100 karakter)." };
+    }
+
+    if (kategoriProduk.length > 50) {
+      return { sukses: false, error: "Kategori terlalu panjang (maksimal 50 karakter)." };
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    const model = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+
+    if (!apiKey) {
+      return { sukses: false, error: "GEMINI_API_KEY belum diatur di environment variable." };
+    }
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    try {
+      const prompt = `Tulis deskripsi produk singkat (2-3 kalimat) dalam bahasa Indonesia yang ramah, menarik, dan tanpa klaim palsu atau berlebihan, hanya berdasarkan informasi berikut:
+Nama produk: ${namaProduk}
+Kategori: ${kategoriProduk || "Umum"}
+
+Tulis langsung deskripsinya saja tanpa tanda kutip, judul, atau pengantar.`;
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [{ text: prompt }],
+            },
+          ],
+        }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        const msg = errorData?.error?.message || `Permintaan ke Gemini gagal (${res.status})`;
+        return { sukses: false, error: msg };
+      }
+
+      const data = await res.json();
+      const hasil = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+
+      if (!hasil) {
+        return { sukses: false, error: "Gemini tidak mengembalikan teks deskripsi." };
+      }
+
+      return { sukses: true, deskripsi: hasil };
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  } catch (err) {
+    if (err.name === "AbortError") {
+      return { sukses: false, error: "Waktu permintaan ke Gemini habis (timeout). Silakan coba lagi." };
+    }
+    return { sukses: false, error: err.message || "Gagal membuat deskripsi dengan AI." };
+  }
+}
+
