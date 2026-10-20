@@ -143,3 +143,62 @@ export async function tambahProduk(prevStateOrFormData, maybeFormData) {
   revalidatePath("/admin");
   redirect("/admin");
 }
+
+export async function ubahProduk(idOrFormData, maybeFormData) {
+  await wajibAdmin();
+
+  let id;
+  let formData;
+
+  if (maybeFormData instanceof FormData) {
+    id = idOrFormData;
+    formData = maybeFormData;
+  } else if (idOrFormData instanceof FormData) {
+    formData = idOrFormData;
+    id = formData.get("id");
+  } else {
+    id = idOrFormData;
+    formData = maybeFormData;
+  }
+
+  const idNum = Number(id);
+  if (!id || isNaN(idNum) || idNum <= 0) {
+    throw new Error("ID produk tidak valid.");
+  }
+
+  const nama = formData?.get ? formData.get("nama")?.toString().trim() : null;
+  const hargaRaw = formData?.get ? formData.get("harga") : null;
+  const harga = Number(hargaRaw);
+  const kategori = formData?.get ? formData.get("kategori")?.toString().trim() || null : null;
+  const foto_url = formData?.get ? formData.get("foto_url")?.toString().trim() || null : null;
+  const deskripsi = formData?.get ? formData.get("deskripsi")?.toString().trim() || null : null;
+
+  if (!nama) {
+    throw new Error("Nama produk wajib diisi.");
+  }
+
+  if (hargaRaw === null || hargaRaw === "" || isNaN(harga) || harga < 0) {
+    throw new Error("Harga harus berupa angka dan tidak boleh negatif.");
+  }
+
+  const supabase = buatClientServer();
+  const { error } = await supabase
+    .from("produk")
+    .update({
+      nama,
+      harga: Math.round(harga),
+      kategori,
+      foto_url,
+      deskripsi,
+    })
+    .eq("id", idNum);
+
+  if (error) {
+    throw new Error(`Gagal memperbarui produk: ${error.message}`);
+  }
+
+  revalidatePath("/");
+  revalidatePath(`/produk/${idNum}`);
+  revalidatePath("/admin");
+  redirect("/admin");
+}
