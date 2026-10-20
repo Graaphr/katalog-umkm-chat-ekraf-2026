@@ -7,6 +7,8 @@ import { toko } from "@/lib/toko";
 // Katalog selalu diambil dari database, bukan di-cache saat build.
 export const dynamic = "force-dynamic";
 
+const PER_HALAMAN = 6;
+
 async function ambilKategori(supabase) {
   try {
     const { data } = await supabase.from("produk").select("kategori");
@@ -25,13 +27,21 @@ async function ambilKategori(supabase) {
   }
 }
 
-async function ambilProduk(q, kategoriDipilih) {
+async function ambilProduk(q, kategoriDipilih, urutan = "terbaru", halaman = 1) {
   try {
     const supabase = buatClientServer();
     let query = supabase
       .from("produk")
-      .select("id, nama, harga, deskripsi, foto_url, kategori, created_at")
-      .order("created_at", { ascending: false });
+      .select("id, nama, harga, deskripsi, foto_url, kategori, created_at", { count: "exact" });
+
+    // US-15: Urutan diterapkan langsung pada query database
+    if (urutan === "termurah") {
+      query = query.order("harga", { ascending: true });
+    } else if (urutan === "termahal") {
+      query = query.order("harga", { ascending: false });
+    } else {
+      query = query.order("created_at", { ascending: false });
+    }
 
     if (q) {
       query = query.ilike("nama", `%${q}%`);
@@ -41,13 +51,30 @@ async function ambilProduk(q, kategoriDipilih) {
       query = query.eq("kategori", kategoriDipilih);
     }
 
-    const [{ data: daftarProduk, error: errProduk }, daftarKategori] =
+    // US-16: Pembatasan jumlah dan offset di query database
+    const dari = (halaman - 1) * PER_HALAMAN;
+    const sampai = dari + PER_HALAMAN - 1;
+    query = query.range(dari, sampai);
+
+    const [{ data: daftarProduk, count, error: errProduk }, daftarKategori] =
       await Promise.all([query, ambilKategori(supabase)]);
 
-    if (errProduk) return { daftarProduk: [], daftarKategori: [], galat: errProduk.message };
-    return { daftarProduk: daftarProduk ?? [], daftarKategori, galat: null };
+    if (errProduk) {
+      return { daftarProduk: [], total: 0, totalHalaman: 0, daftarKategori: [], galat: errProduk.message };
+    }
+
+    const total = count ?? 0;
+    const totalHalaman = Math.max(1, Math.ceil(total / PER_HALAMAN));
+
+    return {
+      daftarProduk: daftarProduk ?? [],
+      total,
+      totalHalaman,
+      daftarKategori,
+      galat: null,
+    };
   } catch (e) {
-    return { daftarProduk: [], daftarKategori: [], galat: e.message };
+    return { daftarProduk: [], total: 0, totalHalaman: 0, daftarKategori: [], galat: e.message };
   }
 }
 
@@ -55,9 +82,26 @@ export default async function HalamanKatalog({ searchParams }) {
   const params = await searchParams;
   const q = params?.q?.trim() || "";
   const kategoriDipilih = params?.kategori?.trim() || "";
-  const adaFilter = Boolean(q || kategoriDipilih);
+  const urutan = params?.urutan?.trim() || "terbaru";
+  const halaman = Math.max(1, parseInt(params?.halaman, 10) || 1);
+  const adaFilter = Boolean(q || kategoriDipilih || (urutan && urutan !== "terbaru"));
 
-  const { daftarProduk, daftarKategori, galat } = await ambilProduk(q, kategoriDipilih);
+  const { daftarProduk, total, totalHalaman, daftarKategori, galat } = await ambilProduk(
+    q,
+    kategoriDipilih,
+    urutan,
+    halaman
+  );
+
+  function buatUrlHalaman(halamanTujuan) {
+    const sp = new URLSearchParams();
+    if (q) sp.set("q", q);
+    if (kategoriDipilih) sp.set("kategori", kategoriDipilih);
+    if (urutan && urutan !== "terbaru") sp.set("urutan", urutan);
+    if (halamanTujuan > 1) sp.set("halaman", String(halamanTujuan));
+    const qs = sp.toString();
+    return qs ? `/?${qs}` : "/";
+  }
 
   return (
     <>
@@ -74,6 +118,11 @@ export default async function HalamanKatalog({ searchParams }) {
           <h2 id="judul-produk" className="text-xl font-bold">
             Produk kami
           </h2>
+          {total > 0 && (
+            <p className="text-sm text-teks-lembut">
+              Menampilkan {daftarProduk.length} dari {total} produk
+            </p>
+          )}
         </div>
 
         <form
@@ -81,7 +130,7 @@ export default async function HalamanKatalog({ searchParams }) {
           action="/"
           className="flex flex-wrap items-end gap-3 rounded-2xl border border-garis bg-permukaan p-4"
         >
-          <div className="min-w-[200px] flex-1">
+          <div className="min-w-[180px] flex-1">
             <Input
               label="Cari produk"
               name="q"
@@ -91,7 +140,7 @@ export default async function HalamanKatalog({ searchParams }) {
             />
           </div>
 
-          <div className="w-full sm:w-48">
+          <div className="w-full sm:w-44">
             <label className="flex flex-col gap-1.5 text-sm font-semibold">
               Kategori
               <select
@@ -109,8 +158,23 @@ export default async function HalamanKatalog({ searchParams }) {
             </label>
           </div>
 
+          <div className="w-full sm:w-44">
+            <label className="flex flex-col gap-1.5 text-sm font-semibold">
+              Urutkan
+              <select
+                name="urutan"
+                defaultValue={urutan}
+                className="w-full rounded-lg border border-garis bg-latar px-3 py-2.5 text-base text-teks focus:border-utama focus:outline-none"
+              >
+                <option value="terbaru">Terbaru</option>
+                <option value="termurah">Termurah</option>
+                <option value="termahal">Termahal</option>
+              </select>
+            </label>
+          </div>
+
           <div className="flex gap-2">
-            <Tombol type="submit">Cari</Tombol>
+            <Tombol type="submit">Terapkan</Tombol>
             {adaFilter && (
               <Tombol href="/" varian="garis">
                 Atur ulang
@@ -135,11 +199,51 @@ export default async function HalamanKatalog({ searchParams }) {
             <p className="text-teks-lembut">Belum ada produk</p>
           )
         ) : (
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-            {daftarProduk.map((produk) => (
-              <KartuProduk key={produk.id} produk={produk} />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+              {daftarProduk.map((produk) => (
+                <KartuProduk key={produk.id} produk={produk} />
+              ))}
+            </div>
+
+            {totalHalaman > 1 && (
+              <nav aria-label="Navigasi halaman produk" className="mt-6 flex flex-wrap items-center justify-center gap-2">
+                {halaman > 1 ? (
+                  <Tombol href={buatUrlHalaman(halaman - 1)} varian="garis">
+                    Sebelumnya
+                  </Tombol>
+                ) : (
+                  <Tombol disabled varian="garis" className="opacity-40 cursor-not-allowed">
+                    Sebelumnya
+                  </Tombol>
+                )}
+
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: totalHalaman }, (_, i) => i + 1).map((noHalaman) => (
+                    <Tombol
+                      key={noHalaman}
+                      href={buatUrlHalaman(noHalaman)}
+                      varian={noHalaman === halaman ? "utama" : "garis"}
+                      className="h-10 w-10 p-0"
+                      aria-current={noHalaman === halaman ? "page" : undefined}
+                    >
+                      {noHalaman}
+                    </Tombol>
+                  ))}
+                </div>
+
+                {halaman < totalHalaman ? (
+                  <Tombol href={buatUrlHalaman(halaman + 1)} varian="garis">
+                    Selanjutnya
+                  </Tombol>
+                ) : (
+                  <Tombol disabled varian="garis" className="opacity-40 cursor-not-allowed">
+                    Selanjutnya
+                  </Tombol>
+                )}
+              </nav>
+            )}
+          </>
         )}
       </section>
     </>
