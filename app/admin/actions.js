@@ -4,6 +4,21 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { buatClientSesiAdmin } from "@/lib/supabase/server";
 
+// Memastikan admin sudah login di server sebelum menjalankan aksi yang mengubah data
+export async function pastikanAdmin(supabase) {
+  const client = supabase || (await buatClientSesiAdmin());
+  const {
+    data: { user },
+    error,
+  } = await client.auth.getUser();
+
+  if (error || !user) {
+    redirect("/admin/login");
+  }
+
+  return user;
+}
+
 export async function masukAdmin(prevStateOrFormData, maybeFormData) {
   const formData = maybeFormData instanceof FormData ? maybeFormData : prevStateOrFormData;
   const isActionState = maybeFormData instanceof FormData;
@@ -73,14 +88,7 @@ export async function gantiPassword(prevStateOrFormData, maybeFormData) {
   }
 
   const supabase = await buatClientSesiAdmin();
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError || !user) {
-    redirect("/admin/login");
-  }
+  await pastikanAdmin(supabase);
 
   const { error } = await supabase.auth.updateUser({
     password: String(passwordBaru),
