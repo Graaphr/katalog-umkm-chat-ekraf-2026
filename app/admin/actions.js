@@ -2,7 +2,8 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { buatClientSesiAdmin } from "@/lib/supabase/server";
+import { buatClientServer, buatClientSesiAdmin } from "@/lib/supabase/server";
+import { wajibAdmin } from "@/lib/supabase/auth";
 
 // Memastikan admin sudah login di server sebelum menjalankan aksi yang mengubah data
 export async function pastikanAdmin(supabase) {
@@ -103,4 +104,42 @@ export async function gantiPassword(prevStateOrFormData, maybeFormData) {
   const pesanSukses = "Password berhasil diganti.";
   if (isActionState) return { sukses: pesanSukses };
   redirect("/admin/password?sukses=" + encodeURIComponent(pesanSukses));
+}
+
+export async function tambahProduk(prevStateOrFormData, maybeFormData) {
+  await wajibAdmin();
+
+  const formData = maybeFormData instanceof FormData ? maybeFormData : prevStateOrFormData;
+
+  const nama = formData?.get ? formData.get("nama")?.toString().trim() : null;
+  const hargaRaw = formData?.get ? formData.get("harga") : null;
+  const harga = Number(hargaRaw);
+  const kategori = formData?.get ? formData.get("kategori")?.toString().trim() || null : null;
+  const foto_url = formData?.get ? formData.get("foto_url")?.toString().trim() || null : null;
+  const deskripsi = formData?.get ? formData.get("deskripsi")?.toString().trim() || null : null;
+
+  if (!nama) {
+    throw new Error("Nama produk wajib diisi.");
+  }
+
+  if (hargaRaw === null || hargaRaw === "" || isNaN(harga) || harga < 0) {
+    throw new Error("Harga harus berupa angka dan tidak boleh negatif.");
+  }
+
+  const supabase = buatClientServer();
+  const { error } = await supabase.from("produk").insert({
+    nama,
+    harga: Math.round(harga),
+    kategori,
+    foto_url,
+    deskripsi,
+  });
+
+  if (error) {
+    throw new Error(`Gagal menyimpan produk: ${error.message}`);
+  }
+
+  revalidatePath("/");
+  revalidatePath("/admin");
+  redirect("/admin");
 }
