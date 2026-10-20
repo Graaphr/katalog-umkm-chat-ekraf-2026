@@ -202,3 +202,31 @@ export async function ubahProduk(idOrFormData, maybeFormData) {
   revalidatePath("/admin");
   redirect("/admin");
 }
+
+export async function hapusProduk(idOrFormData, maybeFormData) {
+  await wajibAdmin();
+
+  let id;
+  if (maybeFormData instanceof FormData) {
+    id = idOrFormData;
+  } else if (idOrFormData instanceof FormData) {
+    id = idOrFormData.get("id");
+  } else {
+    id = idOrFormData;
+  }
+
+  const idNum = Number(id);
+  if (!id || isNaN(idNum) || idNum <= 0) {
+    throw new Error("ID produk tidak valid.");
+  }
+
+  const supabase = buatClientServer();
+  const { error } = await supabase.from("produk").delete().eq("id", idNum);
+
+  if (error) {
+    throw new Error(`Gagal menghapus produk: ${error.message}`);
+  }
+
+  revalidatePath("/");
+  revalidatePath("/admin");
+}

@@ -10,9 +10,10 @@ Ubah app/page.jsx supaya daftar produk diambil dari tabel "produk" di Supabase, 
 
 Tampilkan produk dengan komponen KartuProduk yang sudah ada, tanpa mengubah tampilannya. Kalau gagal mengambil data, tampilkan pesan error yang jelas di halaman. Kalau tabel kosong, tampilkan tulisan "Belum ada produk". Hapus CatatanBelumAktif dari halaman ini.
 
-**Hasil:**
+**Hasil:**app/page.jsx sekarang mengambil semua produk dari tabel "produk" di server, lewat lib/supabase/server.js (SUPABASE_URL dan SUPABASE_SECRET_KEY). Tampilan hero dan grid KartuProduk tidak berubah. Ada tiga kondisi: daftar produk, pesan "Belum ada produk" saat tabel kosong, dan pesan error saat pengambilan data gagal. CatatanBelumAktif sudah dihapus.s
 
-**Perbaikan:**
+**Perbaikan:**Awalnya halaman menampilkan "Gagal memuat produk: Invalid API key". Penyebabnya nilai SUPABASE_SECRET_KEY di .env.local tidak cocok dengan project (salah salin atau kunci lama). Aku menyalin ulang secret key dari dashboard Supabase, lalu me-restart npm run dev. Saat dicoba dengan publishable key, halaman malah menampilkan "Belum ada produk" padahal datanya ada, karena RLS belum punya policy SELECT untuk pengunjung (role anon) sehingga query mengembalikan 0 baris. Kunci secret juga sempat tertempel di chat, jadi aku membuatnya ulang (rotate) dan memastikan nilai asli hanya ada di .env.local, bukan di .env.example.
+
 
 ## US-02 Detail produk
 
@@ -30,9 +31,11 @@ Ubah app/produk/[id]/page.jsx supaya mengambil satu produk dari tabel "produk" d
 
 Ubah components/TombolWhatsApp.jsx menjadi tautan yang membuka https://wa.me/ ke nomor di lib/toko.js, dengan pesan otomatis berisi nama dan harga produk dalam format rupiah. Pesan di-encode dengan encodeURIComponent dan dibuka di tab baru. Pertahankan tampilan tombolnya. Hapus CatatanBelumAktif yang menyebut US-03 di halaman detail produk.
 
-**Hasil:**
+**Hasil:**app/produk/[id]/page.jsx mengambil satu produk dari Supabase berdasarkan id di URL, di sisi server. Kalau produk tidak ada, halaman memanggil notFound() sehingga tampil halaman "tidak ditemukan". Tombol WhatsApp tetap ada, CatatanBelumAktif dihapus.
 
-**Perbaikan:**
+
+**Perbaikan:**Id dengan format tidak valid (misalnya /produk/abc) membuat Supabase mengembalikan error kode 22P02, bukan "tidak ada baris". Kasus itu kutangani sebagai notFound() juga, sedangkan error lain tetap dilempar supaya masalah konfigurasi tidak tersamarkan.
+
 
 ## US-04 Login admin
 
@@ -40,7 +43,8 @@ Ubah components/TombolWhatsApp.jsx menjadi tautan yang membuka https://wa.me/ ke
 
 Buat login admin memakai Supabase Auth (email dan password) dengan @supabase/ssr dan cookie, memakai SUPABASE_URL dan SUPABASE_PUBLISHABLE_KEY. Login diproses dengan Server Action di app/admin/actions.js dan disambungkan ke form di app/admin/login/page.jsx. Login berhasil diarahkan ke /admin; login gagal menampilkan pesan error yang jelas di halaman login. Buat juga tombol "Keluar" di components/NavAdmin.jsx berfungsi: mengakhiri sesi lalu kembali ke /admin/login. Jangan ubah tampilan. Hapus CatatanBelumAktif dari halaman login.
 
-**Hasil:**
+**Hasil:**Login memakai Supabase Auth dengan @supabase/ssr dan cookie, diproses Server Action di app/admin/actions.js dengan SUPABASE_URL dan SUPABASE_PUBLISHABLE_KEY. Login berhasil diarahkan ke /admin, login gagal menampilkan pesan error di halaman login. Tombol "Keluar" mengakhiri sesi dan kembali ke /admin/login.
+
 
 **Perbaikan:**
 
@@ -50,7 +54,8 @@ Buat login admin memakai Supabase Auth (email dan password) dengan @supabase/ssr
 
 Buat Server Action ganti password di app/admin/actions.js untuk admin yang sedang login, memakai Supabase Auth. Validasi di server: password baru minimal 8 karakter dan harus sama dengan konfirmasi. Tampilkan pesan berhasil atau pesan error yang jelas di halaman. Sambungkan ke form di app/admin/password/page.jsx tanpa mengubah tampilannya. Hapus CatatanBelumAktif dari halaman ini.
 
-**Hasil:**
+**Hasil:**Server Action ganti password di app/admin/actions.js memvalidasi di server (minimal 8 karakter, sama dengan konfirmasi), lalu memanggil updateUser untuk admin yang sedang login. Halaman menampilkan pesan berhasil atau error yang jelas.
+
 
 **Perbaikan:**
 
@@ -60,7 +65,8 @@ Buat Server Action ganti password di app/admin/actions.js untuk admin yang sedan
 
 Buat file proxy.js di root proyek (Next.js 16). Semua rute /admin kecuali /admin/login wajib login dengan Supabase Auth; kalau belum login, alihkan ke /admin/login. Pastikan juga setiap Server Action yang mengubah data memeriksa login di server. Hapus CatatanBelumAktif dari halaman /admin.
 
-**Hasil:**
+**Hasil:**proxy.js di root proyek memeriksa sesi dengan Supabase Auth dan mengalihkan semua rute /admin (kecuali /admin/login) ke /admin/login bila belum login. Setiap Server Action yang mengubah data juga memeriksa login di server. CatatanBelumAktif dihapus dari /admin.
+
 
 **Perbaikan:**
 
