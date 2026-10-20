@@ -1,15 +1,32 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import TombolWhatsApp from "@/components/TombolWhatsApp";
-import CatatanBelumAktif from "@/components/CatatanBelumAktif";
-import { cariProdukContoh } from "@/lib/data-contoh";
+import { buatClientServer } from "@/lib/supabase/server";
 import { formatRupiah } from "@/lib/format";
 
-// US-02: halaman ini masih memakai data contoh.
-// Tugas peserta: ambil satu produk dari Supabase berdasarkan id, di sisi server.
+// Detail produk selalu diambil dari database, bukan di-cache saat build.
+export const dynamic = "force-dynamic";
+
+async function ambilProduk(id) {
+  const supabase = buatClientServer();
+  const { data, error } = await supabase
+    .from("produk")
+    .select("id, nama, harga, deskripsi, foto_url, kategori, created_at")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) {
+    // 22P02: format id tidak valid (misalnya /produk/abc), anggap produk tidak ada.
+    if (error.code === "22P02") return null;
+    throw new Error(`Gagal memuat produk: ${error.message}`);
+  }
+
+  return data;
+}
+
 export default async function HalamanDetailProduk({ params }) {
   const { id } = await params;
-  const produk = cariProdukContoh(id);
+  const produk = await ambilProduk(id);
 
   if (!produk) {
     notFound();
@@ -33,7 +50,6 @@ export default async function HalamanDetailProduk({ params }) {
         </p>
         <p className="max-w-prose leading-relaxed text-teks-lembut">{produk.deskripsi}</p>
         <TombolWhatsApp produk={produk} />
-        <CatatanBelumAktif>Tombol pesan belum berfungsi: lihat US-03.</CatatanBelumAktif>
       </div>
     </article>
   );
